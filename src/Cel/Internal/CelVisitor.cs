@@ -49,6 +49,8 @@ internal class CelVisitor : CelBaseVisitor<CelExpressionDelegate>
     private string? MessageNamespace { get; }
     public bool StrictTypeComparison { get; set; }
 
+    private List<EnumDescriptor> EnumDescriptors { get; }
+
     #endregion
 
     #region Constructor
@@ -66,6 +68,10 @@ internal class CelVisitor : CelBaseVisitor<CelExpressionDelegate>
 
         CelFunctions.InitializeFunctions(Functions);
         CelMacros.InitializeMacros(InternalMacros);
+
+        var messageEnumDescriptors = FileDescriptors.SelectMany(c => c.MessageTypes).SelectMany(c => c.EnumTypes);
+        var globalEnumDescriptors = FileDescriptors.SelectMany(c => c.EnumTypes);
+        EnumDescriptors = globalEnumDescriptors.Union(messageEnumDescriptors).ToList();
     }
 
     #endregion
@@ -1323,14 +1329,6 @@ internal class CelVisitor : CelBaseVisitor<CelExpressionDelegate>
     }
 
 
-    private IEnumerable<EnumDescriptor> GetEnumDescriptors(MessageDescriptor messageDescriptor)
-    {
-        foreach (var descriptor in messageDescriptor.EnumTypes)
-        {
-            yield return descriptor;
-        }
-    }
-
     private IEnumerable<MessageDescriptor> GetMessageDescriptors(MessageDescriptor messageDescriptor)
     {
         foreach (var descriptor in messageDescriptor.NestedTypes)
@@ -1342,26 +1340,21 @@ internal class CelVisitor : CelBaseVisitor<CelExpressionDelegate>
 
     private EnumDescriptor? GetEnumDescriptor(string identifier)
     {
-        var messageEnumDescriptors = FileDescriptors.SelectMany(c => c.MessageTypes).SelectMany(GetEnumDescriptors);
-        var globalEnumDescriptors = FileDescriptors.SelectMany(c => c.EnumTypes);
-
-        var enumDescriptors = globalEnumDescriptors.Union(messageEnumDescriptors).ToList();
-
         if (identifier.StartsWith(".", StringComparison.Ordinal))
         {
             //function started with an explicit period, so we need to scope the resolution locally.
-            return enumDescriptors.FirstOrDefault(c => c.FullName == identifier.Substring(1));
+            return EnumDescriptors.FirstOrDefault(c => c.FullName == identifier.Substring(1));
         }
 
         //find the name outright because we have no namespace
         if (string.IsNullOrWhiteSpace(MessageNamespace))
         {
-            return enumDescriptors.FirstOrDefault(c => c.FullName == identifier);
+            return EnumDescriptors.FirstOrDefault(c => c.FullName == identifier);
         }
 
         //find fully qualified A.B.a.b
         var qualifiedNamespace = MessageNamespace + "." + identifier;
-        var descriptor = enumDescriptors.FirstOrDefault(c => c.FullName == qualifiedNamespace);
+        var descriptor = EnumDescriptors.FirstOrDefault(c => c.FullName == qualifiedNamespace);
         if (descriptor != null)
         {
             return descriptor;
@@ -1373,7 +1366,7 @@ internal class CelVisitor : CelBaseVisitor<CelExpressionDelegate>
         if (namespaceSplit.Length > 1)
         {
             qualifiedNamespace = string.Join(".", namespaceSplit.Take(namespaceSplit.Length - 1)) + "." + identifier;
-            descriptor = enumDescriptors.FirstOrDefault(c => c.FullName == qualifiedNamespace);
+            descriptor = EnumDescriptors.FirstOrDefault(c => c.FullName == qualifiedNamespace);
         }
 
         if (descriptor != null)
@@ -1386,7 +1379,7 @@ internal class CelVisitor : CelBaseVisitor<CelExpressionDelegate>
         {
             //this is required for some test that are creating "protobuf.Any(" and missing the "google." prefix.
             qualifiedNamespace = "google." + identifier;
-            descriptor = enumDescriptors.FirstOrDefault(c => c.FullName == qualifiedNamespace);
+            descriptor = EnumDescriptors.FirstOrDefault(c => c.FullName == qualifiedNamespace);
         }
 
         //we may or may not have a descriptor here, so we could return null.
