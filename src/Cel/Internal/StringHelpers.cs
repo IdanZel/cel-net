@@ -560,8 +560,7 @@ public static class StringHelpers
 
     public static bool MatchesString(string value1, string value2)
     {
-        var regex = new Regex(value2);
-        return regex.IsMatch(value1);
+        return Regex.IsMatch(value1, value2);
     }
 
     public static int SizeString(string value)
